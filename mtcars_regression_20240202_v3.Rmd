@@ -1,0 +1,195 @@
+---
+title: mtcars study
+author: Stéphane Lassalvy
+date: 2024-02-02
+output:
+  word_document: default
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# mtcars study
+# title:  mtcars study
+# author: Stéphane Lassalvy
+# date:   2024-02-02"
+# Licence : GPL-3
+
+# install.packages("car")
+# install.packages("FactoMineR")
+library(car)
+library(FactoMineR)
+```
+
+# Abstract
+
+This is a study based on the mtcars data from the R software, trying to determine the influence of the transmission type (Manual vs Automatic) on the consumption (mpg) of the cars. This is the last assignment graded by peers to pass the certificate of the Coursera course "Regression Models" taught by Dr Brian Caffo, Dr Roger D. Peng and Dr Jeff Leek from John Hopkins University. We here performed a backward elimination of the predictors modelling the consumption “mpg” starting with all the predictors possible in the data set. This way we got a more parsimonious model and we tried to get it better by adding it the interactions terms of transmission with weight (am:wt) and transmission with horsepower (am:hp). This ancova model that we fitted had an adjusted R-squared of 0.87 with residuals reasonably following a normal distribution. Our model showed Manual cars had a +14.9 miles/gallon significant effect and showed an interaction slope “am:wt” of -5.21 for Manual cars : on the whole, Manual cars consume less but as their weight grows up they will comparatively consume more than Automatic ones.
+
+# descriptive statistics
+```{r, echo=FALSE}
+# observed vs preducted function
+plot.valuesVsPredicted <- function(mdl){
+  plot(dat$mpg, fitted(mdl))
+  abline(b=1, a=0, col = "red")
+}
+```
+
+
+```{r, echo=FALSE}
+# Plot for normality of residuals function
+plot.res <- function(mdl){
+  print(shapiro.test(residuals(mdl)))
+  par(mfrow = c(1,2))
+  qqnorm(residuals(mdl))
+  qqline(residuals(mdl), col =  "red")
+  hist(residuals(mdl), freq = FALSE)
+  points(density(residuals(mdl)), type = "l", col = "blue")
+  points(seq(-4,4,0.01), dnorm(seq(-4,4,0.01), mean = 0, sd = sd(residuals(mdl))), type = "l", col = "darkgreen")
+}
+```
+
+```{r, echo=FALSE}
+# Data
+dat <- mtcars
+dat$am <- factor(dat$am)
+levels(dat$am) <- c("Auto", "Manual")
+dat$vs <- factor(dat$vs)
+levels(dat$vs) <- c("V-shaped", "Straight")
+# dat$carb <- factor(dat$carb)
+dat$cyl  <- factor(dat$cyl)
+dat$gear <- factor(dat$gear)
+```
+
+```{r, echo=FALSE}
+# Data for pairs scatter plot
+dat.pairs <- dat[, -c(8,9)]
+```
+
+```{r, echo=FALSE}
+# Pairs scatter plot
+## put (absolute) correlations on the upper panels,
+## with size proportional to the correlations.
+panel.cor <- function(x, y, digits = 2, prefix = "", cex.cor, ...)
+{
+  par(usr = c(0, 1, 0, 1))
+  r <- cor(x, y)
+  txt <- format(c(r, 0.123456789), digits = digits)[1]
+  txt <- paste0(prefix, txt)
+  if(missing(cex.cor)) cex.cor <- 0.8/strwidth(txt)
+  text(0.5, 0.5, txt, cex = cex.cor * abs(r))
+}
+
+pairs(dat.pairs, lower.panel = panel.smooth, upper.panel = panel.cor,
+      gap=0, row1attop=FALSE)
+
+```
+
+## Frequency table of "am" VS "vs"
+
+```{r}
+# Frequencies am VS vs 
+table(dat$am, dat$vs)
+```
+
+## Frequency table for "cyl" and "gear"
+```{r}
+table(dat$cyl)
+```
+
+```{r}
+table(dat$gear)
+```
+
+# PCA of data
+
+```{r, echo=FALSE}
+# PCA of data
+dat.pca <- PCA(X = dat, scale.unit = TRUE, ncp = 2, quali.sup = c(2,8,9,10), axes = c(1,2), graph = FALSE)
+plot.PCA(dat.pca, choix = "var")
+plot.PCA(dat.pca, choix = "ind", habillage = 9)
+```
+
+Axis 1 of the PCA opposes "mpg" with the engine power variable like "hp" or "carb", but also with the weight variable "wt". Variable "drat" may contribute positively to "mpg". The "am" levels are  not very well discriminated 1st axis of the PCA which correspond also to "mpg".
+
+# Boxplot of "mpg" VS "am" levels
+```{r, echo=FALSE}
+boxplot(split(dat$mpg, dat$am))
+```
+
+## Two sample T-test for "mpg" VS "am"
+```{r, echo=FALSE}
+t.test(mpg ~ am, data = dat)
+```
+
+
+# Trying backward elimination
+```{r}
+# First model
+mdl <- lm(mpg ~ ., data = dat)
+
+mdl.sel <- invisible(step(mdl, direction = "backward"))
+summary(mdl.sel)
+
+plot.res(mdl.sel)
+```
+
+# Trying to add interaction terms am:wt and am:hp
+```{r}
+mdl.ancova <- update(mdl.sel, mpg ~ . + am:wt + am:hp)
+
+summary(mdl.ancova)
+
+plot.res(mdl.ancova)
+
+par(mfrow = c(2,2))
+plot(mdl.ancova)
+```
+
+Residuals of the model mdl.ancova are normal and its adjusted R² of 0.86 is quite good. It appears now that "am" and "am:wt" are significant.
+
+## Description of the relationship of mpg ~ wt by am to see if Auto and Manual groups have different slopes
+```{r}
+# see if wt splope differs following am level
+plot(dat$wt, dat$mpg, col = dat$am, pch = 3)
+reg0 <- lm(mpg ~ wt, dat[dat$am == "Auto",])
+coef(reg0)
+reg1 <- lm(mpg ~ wt, dat[dat$am == "Manual",])
+coef(reg1)
+abline(reg0, col = "black")
+abline(reg1, col = "red")
+```
+The slope of "wt" appears to be different for Automatic and Manual cars. The slope for Manual cars is about 5 miles/gallon/1000lbs lesser than for Automatic ones.
+
+<!-- ## Description of the relationship of mpg ~ hp by am to see if Auto and Manual groups have different slopes -->
+<!-- ```{r} -->
+<!-- # see if hp splope differs following am level -->
+<!-- plot(dat$hp, dat$mpg, col = dat$am, pch = 3) -->
+<!-- reg0 <- lm(mpg ~ hp, dat[dat$am == "Auto",]) -->
+<!-- coef(reg0) -->
+<!-- reg1 <- lm(mpg ~ hp, dat[dat$am == "Manual",]) -->
+<!-- coef(reg1) -->
+<!-- abline(reg0, col = "black") -->
+<!-- abline(reg1, col = "red") -->
+<!-- ``` -->
+
+
+# Conclusion
+
+The model mdl.ancova fit well the data with an adjusted R² equals to 0.87, but we can’t assure it has a good predictive value for new data to come. This model allows us to test that the “am” effect is significant being 14.9 miles/gallon higher for Manual cars. The “am:wt” interaction is also significant showing a slope of -5.21 miles/gallon/1000lbs Manual cars : on the whole, Manual cars consume less, but as their weight grows up they will comparatively consume more than Automatic ones.
+
+# References
+
+  Caffo B et al (2024) : Regression Models - Online course on Coursera from John Hopkins              University
+
+  Fox J, Weisberg S (2019). _An R Companion to Applied Regression_, Third edition. Sage,
+  Thousand Oaks CA. <https://socialsciences.mcmaster.ca/jfox/Books/Companion/>.
+  
+  Le S, Josse J, Husson F (2008). FactoMineR: An R Package for Multivariate Analysis. Journal of      Statistical Software, 25(1), 1-18. 10.18637/jss.v025.i01
+  
+  R Core Team (2023). _R: A Language and Environment for Statistical Computing_. R Foundation for     Statistical Computing, Vienna, Austria. <https://www.R-project.org/>.
+  
